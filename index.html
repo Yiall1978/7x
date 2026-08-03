@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cypress — Tests that watch themselves run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --plum: #1B1330;
+    --plum-deep: #120C22;
+    --mint: #4FE3A1;
+    --mint-dim: #33B380;
+    --lav: #8F86B8;
+    --paper: #F1EEFA;
+    --line: rgba(241,238,250,0.12);
+    --red: #FF6B6B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{background:var(--plum); color:var(--paper); font-family:'Space Grotesk',sans-serif; overflow-x:hidden;}
+  a{color:inherit; text-decoration:none;}
+  ::selection{background:var(--mint); color:var(--plum-deep);}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 5vw;
+    background:linear-gradient(var(--plum) 55%, transparent);
+  }
+  .logo{ font-size:20px; font-weight:700; display:flex; align-items:center; gap:8px; }
+  .logo .glyph{ color:var(--mint); font-family:'JetBrains Mono',monospace; }
+  .nav-links{ display:flex; gap:32px; font-size:14px; font-weight:500; color:var(--lav); }
+  .nav-links a:hover{ color:var(--paper); }
+  .nav-cta{
+    background:var(--mint); color:var(--plum-deep); padding:10px 20px; border-radius:6px;
+    font-weight:700; font-size:14px;
+  }
+  @media(max-width:820px){ .nav-links{display:none;} }
+
+  .hero{
+    min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+    padding:140px 5vw 80px;
+    position:relative;
+  }
+  .hero-grid{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:60px; align-items:center; }
+  @media(max-width:960px){ .hero-grid{grid-template-columns:1fr;} }
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--mint);
+    display:flex; align-items:center; gap:10px; margin-bottom:20px;
+  }
+  .eyebrow .bar{ width:16px; height:1px; background:var(--mint); }
+
+  h1{ font-size:clamp(40px,6vw,68px); font-weight:700; line-height:1.05; letter-spacing:-0.02em; }
+  h1 .hl{ color:var(--mint); }
+
+  .hero-sub{ margin-top:24px; font-size:18px; line-height:1.65; color:var(--lav); max-width:480px; }
+
+  .hero-actions{ margin-top:36px; display:flex; gap:20px; flex-wrap:wrap; align-items:center; }
+  .btn-primary{
+    background:var(--mint); color:var(--plum-deep); padding:15px 30px; border-radius:6px;
+    font-weight:700; font-size:15px; display:inline-block; transition:transform .15s, box-shadow .15s;
+  }
+  .btn-primary:hover{ transform:translateY(-2px); box-shadow:0 8px 24px rgba(79,227,161,0.25); }
+  .btn-ghost{
+    font-weight:600; font-size:14px; color:var(--paper); border-bottom:1px solid var(--line); padding-bottom:3px;
+  }
+
+  /* signature: fake terminal test runner */
+  .runner{
+    border:1px solid var(--line); border-radius:10px; background:var(--plum-deep);
+    overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,0.35);
+  }
+  .runner-bar{
+    display:flex; align-items:center; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line);
+  }
+  .runner-bar .dot{ width:10px; height:10px; border-radius:50%; }
+  .runner-bar .r1{background:#FF6B6B;} .runner-bar .r2{background:#FFD166;} .runner-bar .r3{background:#4FE3A1;}
+  .runner-bar span.title{ margin-left:10px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--lav); }
+  .runner-body{ padding:20px; font-family:'JetBrains Mono',monospace; font-size:13.5px; line-height:2; }
+  .runner-body .suite{ color:var(--lav); margin-top:6px; }
+  .runner-body .pass{ color:var(--mint); }
+  .runner-body .pass:before{ content:"✓ "; }
+  .runner-body .running{ color:var(--paper); }
+  .runner-body .running:before{ content:"↻ "; color:var(--mint); animation:spin 1s linear infinite; display:inline-block; }
+  @keyframes spin{ from{transform:rotate(0);} to{transform:rotate(360deg);} }
+  .runner-footer{
+    display:flex; justify-content:space-between; padding:14px 20px; border-top:1px solid var(--line);
+    font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--lav);
+  }
+  .runner-footer b{ color:var(--mint); }
+
+  /* strip */
+  .strip{ border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:16px 0; overflow:hidden; white-space:nowrap; }
+  .strip-track{
+    display:inline-flex; gap:44px; animation:scroll 30s linear infinite;
+    font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--lav);
+  }
+  .strip-track b{ color:var(--paper); }
+  @keyframes scroll{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+
+  section{ padding:120px 5vw; }
+  .section-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:40px; margin-bottom:60px; flex-wrap:wrap; }
+  .section-head h2{ font-size:clamp(32px,4.5vw,52px); font-weight:700; max-width:600px; letter-spacing:-0.01em; }
+  .section-head p{ max-width:340px; color:var(--lav); font-size:15px; line-height:1.6; }
+
+  /* feature log entries, mirrors assertion style */
+  .assertions{ border-top:1px solid var(--line); }
+  .assertion{
+    display:grid; grid-template-columns:40px 1fr 220px; gap:24px; align-items:start;
+    padding:32px 0; border-bottom:1px solid var(--line);
+  }
+  .assertion .mark{ color:var(--mint); font-family:'JetBrains Mono',monospace; font-size:18px; }
+  .assertion h3{ font-size:21px; font-weight:600; }
+  .assertion p{ color:var(--lav); font-size:14.5px; margin-top:6px; max-width:520px; }
+  .assertion .code{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--lav);
+    background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:6px; padding:12px 14px;
+  }
+  @media(max-width:760px){ .assertion{grid-template-columns:30px 1fr;} .assertion .code{grid-column:2;} }
+
+  .stat-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .stat{ background:var(--plum-deep); padding:32px 26px; }
+  .stat .num{ font-family:'JetBrains Mono',monospace; font-size:36px; color:var(--mint); }
+  .stat .lbl{ margin-top:6px; font-size:13px; color:var(--lav); }
+  @media(max-width:700px){ .stat-row{grid-template-columns:repeat(2,1fr);} }
+
+  .plans{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; }
+  .plan{ border:1px solid var(--line); border-radius:12px; padding:32px 28px; display:flex; flex-direction:column; gap:18px; }
+  .plan.highlight{ border-color:var(--mint); background:rgba(79,227,161,0.05); }
+  .plan .name{ font-size:13px; color:var(--lav); text-transform:uppercase; letter-spacing:0.08em; }
+  .plan .price{ font-family:'JetBrains Mono',monospace; font-size:34px; }
+  .plan .price small{ font-size:13px; color:var(--lav); }
+  .plan ul{ list-style:none; display:flex; flex-direction:column; gap:9px; font-size:14px; color:var(--lav); flex-grow:1; }
+  .plan ul li:before{ content:"✓ "; color:var(--mint); }
+  .plan a{ text-align:center; }
+  @media(max-width:820px){ .plans{grid-template-columns:1fr;} }
+
+  .cta-block{ text-align:center; border-top:1px solid var(--line); }
+  .cta-block h2{ font-size:clamp(34px,7vw,80px); font-weight:700; letter-spacing:-0.02em; }
+  .cta-block .btn-primary{ margin-top:32px; }
+
+  footer{
+    padding:36px 5vw; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px;
+    font-size:13px; color:var(--lav);
+  }
+  footer .foot-links{ display:flex; gap:22px; }
+  footer a:hover{ color:var(--paper); }
+
+  @media(prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
+  :focus-visible{ outline:2px solid var(--mint); outline-offset:3px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo"><span class="glyph">&gt;_</span>cypress</div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#docs">Docs</a>
+  </div>
+  <a class="nav-cta" href="#pricing">Get started</a>
+</nav>
+
+<section class="hero">
+  <div class="hero-grid">
+    <div>
+      <div class="eyebrow"><span class="bar"></span>v13 · now with component testing</div>
+      <h1>Tests that <span class="hl">watch</span><br>themselves run.</h1>
+      <p class="hero-sub">Write end-to-end tests in real JavaScript, watch every click and assertion replay in the browser, and know exactly why a test failed — not just that it did.</p>
+      <div class="hero-actions">
+        <a class="btn-primary" href="#pricing">Install cypress</a>
+        <a class="btn-ghost" href="#docs">Read the docs →</a>
+      </div>
+    </div>
+
+    <div class="runner">
+      <div class="runner-bar">
+        <div class="dot r1"></div><div class="dot r2"></div><div class="dot r3"></div>
+        <span class="title">checkout.spec.js</span>
+      </div>
+      <div class="runner-body">
+        <div class="suite">Checkout flow</div>
+        <div class="pass">adds item to cart (142ms)</div>
+        <div class="pass">applies discount code (88ms)</div>
+        <div class="pass">calculates shipping (64ms)</div>
+        <div class="running">confirms order</div>
+      </div>
+      <div class="runner-footer">
+        <span><b>3</b> passing</span>
+        <span>1 running</span>
+        <span>0 failing</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="strip">
+  <div class="strip-track">
+    <span><b>cy.visit()</b> loads app in 210ms</span>
+    <span><b>cy.get()</b> retries until found</span>
+    <span><b>cy.click()</b> waits for actionability</span>
+    <span><b>cy.intercept()</b> stubs network calls</span>
+    <span><b>cy.screenshot()</b> on failure</span>
+    <span><b>cy.visit()</b> loads app in 210ms</span>
+    <span><b>cy.get()</b> retries until found</span>
+    <span><b>cy.click()</b> waits for actionability</span>
+    <span><b>cy.intercept()</b> stubs network calls</span>
+    <span><b>cy.screenshot()</b> on failure</span>
+  </div>
+</div>
+
+<section id="features">
+  <div class="section-head">
+    <h2>Every assertion, accounted for.</h2>
+    <p>No flaky waits, no guessing why CI is red. Every command is logged, snapshotted, and replayable.</p>
+  </div>
+  <div class="assertions">
+    <div class="assertion">
+      <div class="mark">01</div>
+      <div>
+        <h3>Time-travel debugging</h3>
+        <p>Hover any command in the log to see a DOM snapshot from that exact moment in the test.</p>
+      </div>
+      <div class="code">cy.get('.btn').click()<br>→ snapshot saved</div>
+    </div>
+    <div class="assertion">
+      <div class="mark">02</div>
+      <div>
+        <h3>Automatic waiting</h3>
+        <p>No sleep(5000). Commands retry against your app's real state until they pass or time out.</p>
+      </div>
+      <div class="code">cy.get('.toast')<br>.should('be.visible')</div>
+    </div>
+    <div class="assertion">
+      <div class="mark">03</div>
+      <div>
+        <h3>Network stubbing</h3>
+        <p>Intercept, delay, or mock any request without touching your backend.</p>
+      </div>
+      <div class="code">cy.intercept('GET', '/api/user',<br>{ fixture: 'user.json' })</div>
+    </div>
+    <div class="assertion">
+      <div class="mark">04</div>
+      <div>
+        <h3>Component testing</h3>
+        <p>Mount a single React, Vue, or Svelte component and test it in isolation — same API, no e2e overhead.</p>
+      </div>
+      <div class="code">mount(&lt;Checkout /&gt;)</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>What teams actually see in CI.</h2>
+    <p>Numbers from projects running Cypress in continuous integration.</p>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><div class="num">340K+</div><div class="lbl">Repos running Cypress</div></div>
+    <div class="stat"><div class="num">-64%</div><div class="lbl">Flaky test reports</div></div>
+    <div class="stat"><div class="num">4.2s</div><div class="lbl">Avg. test startup</div></div>
+    <div class="stat"><div class="num">99.95%</div><div class="lbl">Dashboard uptime</div></div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="section-head">
+    <h2>Run it free, scale it with your team.</h2>
+    <p>Local testing is always free. Pay only for parallelization and recorded runs.</p>
+  </div>
+  <div class="plans">
+    <div class="plan">
+      <div class="name">Open Source</div>
+      <div class="price">$0</div>
+      <ul>
+        <li>Unlimited local test runs</li>
+        <li>Full component testing</li>
+        <li>Community support</li>
+      </ul>
+      <a class="btn-ghost" href="#">Install free</a>
+    </div>
+    <div class="plan highlight">
+      <div class="name">Team</div>
+      <div class="price">$75<small>/mo</small></div>
+      <ul>
+        <li>Parallelized CI runs</li>
+        <li>Recorded test dashboard</li>
+        <li>Flaky test detection</li>
+        <li>Slack &amp; GitHub integration</li>
+      </ul>
+      <a class="btn-primary" href="#">Start team trial</a>
+    </div>
+    <div class="plan">
+      <div class="name">Enterprise</div>
+      <div class="price">Custom</div>
+      <ul>
+        <li>SSO &amp; audit logs</li>
+        <li>Dedicated support</li>
+        <li>On-prem dashboard option</li>
+      </ul>
+      <a class="btn-ghost" href="#">Talk to sales</a>
+    </div>
+  </div>
+</section>
+
+<section class="cta-block">
+  <h2>Stop guessing<br>why tests fail.</h2>
+  <a class="btn-primary" href="#pricing">Install cypress</a>
+</section>
+
+<footer>
+  <div>© 2026 Cypress. Built for developers who test.</div>
+  <div class="foot-links">
+    <a href="#docs">Docs</a>
+    <a href="#">GitHub</a>
+    <a href="#">Status</a>
+  </div>
+</footer>
+
+</body>
+</html>
